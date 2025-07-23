@@ -1,0 +1,82 @@
+---
+title: "sigPCA: Statistical Significance Testing for Principal Components"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{sigPCA: Statistical Significance Testing for Principal Components}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+library(sigPCA)
+```
+
+# Introduction
+
+The `sigPCA` package provides tools to assess the statistical significance of principal components, based on the Marchenko–Pastur distribution derived from random matrix theory. This approach allows for rigorous determination of whether observed eigenvalues represent signal or noise in high-dimensional datasets.
+
+The core method implemented here was developed by Dr. Enrique Hernández-Lemus and is grounded in theoretical results from random matrix theory. Additional empirical tools (e.g., permutation-based *p*-values) are available for comparison or exploratory analysis.
+
+# Basic Example: White Noise
+
+We simulate a dataset of 100 observations with 10 variables, generated as white noise (no signal):
+
+```{r white-noise}
+set.seed(123)
+X_white <- matrix(rnorm(1000), nrow = 100, ncol = 10)
+result_white <- sigPCA(X_white, method = "both", num_permutations = 100)
+result_white$mp$significant_components
+```
+
+No components should be detected as significant.
+
+```{r plot-white}
+plot_sigPCA(result_white$mp$eigenvalues, result_white$mp$mp_bounds)
+```
+
+# Example: Latent Signal
+
+Now we add signal by introducing strong correlation in the first two components:
+
+```{r correlated}
+set.seed(123)
+  {
+    n <- 100
+    p <- 10
+    k <- 2
+    latent <- matrix(rnorm(n * k, mean = 3), nrow = n, ncol = k)
+    loadings <- matrix(rnorm(p * k), nrow = k, ncol = p)
+    noise <- matrix(rnorm(n * p, sd = 0.3), nrow = n, ncol = p)
+    x <- latent %*% loadings + noise
+    result_signal <- sigPCA(x, method = "mp")
+  }
+```
+
+We expect at least two components to be significant.
+
+```{r plot-signal}
+plot_sigPCA(result_signal$mp$eigenvalues, result_signal$mp$mp_bounds)
+```
+
+# Optional: Permutation-Based *p*-values
+
+Permutation methods serve as empirical validation or sensitivity checks:
+
+```{r permutation}
+result_signal$perm$pvalues
+```
+
+# Interpretation
+
+The components with eigenvalues greater than the theoretical Marchenko–Pastur upper bound are considered statistically significant. These likely represent underlying structure or correlated signals in the data.
+
+Permutation-based *p*-values provide an empirical check, but are not required when using the MP-based method.
+
+# References
+
+- Marchenko, V.A. and Pastur, L.A. (1967). *Distribution of eigenvalues for some sets of random matrices*. Mathematics of the USSR-Sbornik, **1**(4), 457–483.
+- Hernández-Lemus, E. *(in preparation)*. [Theoretical reference for sigPCA]

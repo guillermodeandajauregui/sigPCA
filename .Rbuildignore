@@ -1,2 +1,8 @@
 ^sigPCA\.Rproj$
 ^\.Rproj\.user$
+^LICENSE\.md$
+^README\.Rmd$
+^dev/dev_script\.R$
+^dev(/|$)
+^doc$
+^Meta$
