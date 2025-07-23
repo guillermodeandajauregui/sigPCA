@@ -11,8 +11,8 @@ includes an optional permutation-based method for empirical validation.
 ## Installation
 
 ``` r
-# install.packages("devtools")
-devtools::install_github("yourusername/sigPCA")
+# 
+install.packages("pak") pak::pak("guillermodeandajauregui/sigPCA")
 ```
 
 ## Example 1: White Noise (No Signal Expected)
