@@ -3,6 +3,7 @@
 export(compute_eigenvalues)
 export(marchenko_pastur_bounds)
 export(plot_sigPCA)
+export(plot_sigPCA_histogram)
 export(sigPCA)
 export(sigPCA_mp)
 export(sigPCA_perm)
