@@ -7,9 +7,9 @@ Description: What the package does (one paragraph).
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.3
 Suggests: 
     ggplot2,
+    palmerpenguins,
     knitr,
     rmarkdown,
     RMTstat,
@@ -18,3 +18,4 @@ Config/testthat/edition: 3
 Imports: 
     stats
 VignetteBuilder: knitr
+Config/roxygen2/version: 8.0.0

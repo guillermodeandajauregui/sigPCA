@@ -26,7 +26,7 @@ result_white$mp$significant_components
 plot_sigPCA(result_white$mp$eigenvalues, result_white$mp$mp_bounds)
 ```
 
-![](README_files/figure-gfm/white-noise-1.png)<!-- -->
+![](man/figures/README-white-noise-1.png)<!-- -->
 
 ## Example 2: Latent Structure (Signal Expected)
 
@@ -47,7 +47,7 @@ result_signal$mp$significant_components
 plot_sigPCA(result_signal$mp$eigenvalues, result_signal$mp$mp_bounds)
 ```
 
-![](README_files/figure-gfm/latent-signal-1.png)<!-- -->
+![](man/figures/README-latent-signal-1.png)<!-- -->
 
 ## Interpretation
 
