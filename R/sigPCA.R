@@ -32,7 +32,7 @@ sigPCA <- function(data,
 
   if (method %in% c("perm", "both")) {
     out_perm <- sigPCA_perm(data, num_permutations = num_permutations,
-                            center = center, scale = scale.)
+                            center = center, scale. = scale.)
   }
 
   result <- list(
