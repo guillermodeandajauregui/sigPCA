@@ -9,6 +9,7 @@
 #' @param add_null Optional numeric vector of null eigenvalues (e.g. from permutation). Default: NULL.
 #'
 #' @return A `ggplot2` object.
+#' @importFrom ggplot2 .data
 #' @export
 #'
 #' @examples
@@ -34,38 +35,49 @@ plot_sigPCA <-
     significant = highlight
   )
 
-  library(ggplot2)
+
 
   p <-
-    ggplot(df) +
-    aes(x = index,
-        y = eigenvalue,
-        color = significant) +
-    geom_point(size = 3) +
-    geom_hline(yintercept = mp_bounds$lambda_max,
-               linetype = "dashed",
-               color = "blue") +
-    geom_hline(yintercept = mp_bounds$lambda_min,
-               linetype = "dashed",
-               color = "blue") +
-    scale_color_manual(values = c("black", "red")) +
-    labs(
+    ggplot2::ggplot(df) +
+    ggplot2::aes(
+      x = .data$index,
+      y = .data$eigenvalue,
+      color = .data$significant
+    ) +
+    ggplot2::geom_point(size = 3) +
+    ggplot2::geom_hline(
+      yintercept = mp_bounds$lambda_max,
+      linetype = "dashed",
+      color = "blue"
+    ) +
+    ggplot2::geom_hline(
+      yintercept = mp_bounds$lambda_min,
+      linetype = "dashed",
+      color = "blue"
+    ) +
+    ggplot2::scale_color_manual(values = c("black", "red")) +
+    ggplot2::labs(
       title = "PCA Eigenvalue Spectrum",
       x = "Principal Component Index",
       y = "Eigenvalue",
       color = "Significant"
     ) +
-    theme_minimal()
+    ggplot2::theme_minimal()
 
   if (!is.null(add_null)) {
     p <-
       p +
-      geom_density(data = data.frame(null = add_null),
-                   aes(x = null, y = ..scaled..),
-                   inherit.aes = FALSE,
-                   fill = "gray",
-                   alpha = 0.3,
-                   bw = "SJ")
+      ggplot2::geom_density(
+        data = data.frame(null = add_null),
+        ggplot2::aes(
+          x = .data$null,
+          y = ggplot2::after_stat(.data$scaled)
+        ),
+        inherit.aes = FALSE,
+        fill = "gray",
+        alpha = 0.3,
+        bw = "SJ"
+      )
   }
 
   return(p)

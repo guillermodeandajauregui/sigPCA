@@ -11,6 +11,7 @@
 #' @param bins Number of histogram bins. Default: 30.
 #'
 #' @return A `ggplot2` object.
+#' @importFrom ggplot2 .data
 #' @export
 #'
 #' @examples
@@ -54,9 +55,9 @@ plot_sigPCA_histogram <-
         significant = eigenvalues > mp_bounds$lambda_max
       )
 
-    ggplot2::ggplot(df, ggplot2::aes(x = eigenvalue)) +
+    ggplot2::ggplot(df, ggplot2::aes(x = .data$eigenvalue)) +
       ggplot2::geom_histogram(
-        ggplot2::aes(y = ggplot2::after_stat(density)),
+        ggplot2::aes(y = ggplot2::after_stat(.data$density)),
         bins = bins,
         color = "white",
         fill = "gray70"
@@ -74,7 +75,7 @@ plot_sigPCA_histogram <-
       ) +
       ggplot2::geom_rug(
         data = df[df$significant, , drop = FALSE],
-        ggplot2::aes(x = eigenvalue),
+        ggplot2::aes(x = .data$eigenvalue),
         sides = "b",
         linewidth = 0.8
       ) +
