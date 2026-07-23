@@ -16,9 +16,10 @@ Authors@R: c(
   )
 Description: Identifies principal components whose eigenvalues exceed those
     expected under noise. Implements analytical thresholds derived from the
-    Marchenko-Pastur distribution and empirical permutation tests, and provides
+    Marchenko-Pastur distribution (Marchenko and Pastur, 1967)
+    <doi:10.1070/SM1967v001n04ABEH001994> and empirical permutation tests, and provides
     functions for visualizing observed and null eigenvalue spectra.
-License: MIT
+License: MIT + file LICENSE
 URL: https://github.com/guillermodeandajauregui/sigPCA
 BugReports: https://github.com/guillermodeandajauregui/sigPCA/issues
 Encoding: UTF-8

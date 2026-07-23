@@ -22,7 +22,8 @@ The `sigPCA` package provides tools to assess the statistical significance of pr
 
 ```r
 # 
-install.packages("pak") pak::pak("guillermodeandajauregui/sigPCA")
+install.packages("pak")
+pak::pak("guillermodeandajauregui/sigPCA")
 ```
 
 ## Example 1: White Noise (No Signal Expected)

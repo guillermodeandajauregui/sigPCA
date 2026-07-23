@@ -12,7 +12,8 @@ includes an optional permutation-based method for empirical validation.
 
 ``` r
 # 
-install.packages("pak") pak::pak("guillermodeandajauregui/sigPCA")
+install.packages("pak")
+pak::pak("guillermodeandajauregui/sigPCA")
 ```
 
 ## Example 1: White Noise (No Signal Expected)
