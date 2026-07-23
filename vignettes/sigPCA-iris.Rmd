@@ -1,0 +1,222 @@
+---
+title: "Finding structure in iris with sigPCA"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Finding structure in iris with sigPCA}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 4.5
+)
+```
+
+## Overview
+
+Principal component analysis (PCA) orders components by the amount of variation
+they explain, but it does not determine how many of them contain structure
+beyond sampling noise. A scree plot can suggest a cutoff, although that choice
+is often subjective. `sigPCA` instead compares the observed eigenvalues with a
+null spectrum.
+
+This vignette uses the `iris` data to answer a concrete question: how many axes
+of floral morphology can be distinguished from a noise-only spectrum? We first
+use the Marchenko--Pastur bounds and then compare the result with a permutation
+test. Species labels are withheld from both tests and used only afterward to
+interpret the retained component.
+
+## Prepare the measurements
+
+The data contain four continuous measurements of sepal and petal morphology.
+We select those measurements, check for complete observations, and leave the
+species label out of the PCA.
+
+```{r data}
+measurement_names <- c(
+  "Sepal.Length",
+  "Sepal.Width",
+  "Petal.Length",
+  "Petal.Width"
+)
+
+iris_data <- datasets::iris
+complete_rows <- stats::complete.cases(iris_data[, measurement_names])
+
+x <- as.matrix(iris_data[complete_rows, measurement_names])
+dim(x)
+```
+
+All measurements use the same unit, but their variances differ. We use the
+default `scale. = TRUE`, so that each measurement contributes on a standardized
+scale. The analysis is therefore performed on the correlation matrix rather
+than allowing the most variable measurement to dominate the spectrum.
+
+## Test the eigenvalue spectrum
+
+The Marchenko--Pastur (MP) distribution describes the eigenvalue spectrum
+expected under a noise model. For a matrix with $n$ observations and $p$
+standardized variables, `sigPCA` calculates the bounds
+
+\[
+\lambda_{\pm} = \left(1 \pm \sqrt{p/n}\right)^2.
+\]
+
+Eigenvalues above the upper bound are candidates for structured variation that
+cannot be explained by this null model. We request both the MP and permutation
+analyses in one call.
+
+```{r fit}
+set.seed(2026)
+
+iris_sig <- sigPCA::sigPCA(
+  x,
+  method = "both",
+  num_permutations = 999
+)
+
+iris_sig$mp$mp_bounds
+iris_sig$combined
+```
+
+The component-level results are easier to compare in a table.
+
+```{r results-table}
+eigenvalues <- iris_sig$mp$eigenvalues
+
+component_results <- data.frame(
+  component = paste0("PC", seq_along(eigenvalues)),
+  eigenvalue = round(eigenvalues, 3),
+  variance_percent = round(100 * eigenvalues / sum(eigenvalues), 1),
+  beyond_mp_upper = seq_along(eigenvalues) %in%
+    iris_sig$mp$significant_components,
+  permutation_p = iris_sig$perm$pvalues
+)
+
+knitr::kable(component_results)
+```
+
+PC1 lies well above the MP upper bound and explains about 73% of the total
+standardized variance. It is also supported by the permutation analysis. The
+agreement is summarized in `iris_sig$combined$consensus`.
+
+The ordered spectrum shows the position of each component relative to the MP
+bounds.
+
+```{r spectrum, fig.cap="Observed eigenvalues and the Marchenko--Pastur bounds. Components above the upper bound are highlighted."}
+sigPCA::plot_sigPCA(
+  iris_sig$mp$eigenvalues,
+  iris_sig$mp$mp_bounds
+)
+```
+
+The complementary histogram, based on an original design by Enrique
+Hernández-Lemus, shows the empirical distribution of the eigenvalues. The
+dashed lines mark the MP bounds, and the rug marks eigenvalues above the upper
+bound. We pass the complete `sigPCA()` result directly to
+`plot_sigPCA_histogram()`.
+
+```{r spectrum-histogram, fig.cap="Histogram and density of the observed eigenvalues with the Marchenko--Pastur bounds."}
+sigPCA::plot_sigPCA_histogram(
+  iris_sig,
+  bins = 4
+)
+```
+
+Because `iris` contains only four measurement variables, this histogram is
+necessarily coarse. Its distributional view becomes more informative in
+higher-dimensional analyses with a larger eigenvalue spectrum.
+
+The two significance methods answer related questions under different null
+models. The MP test uses a theoretical spectrum determined by $p/n$. The
+permutation test shuffles each variable independently, preserving its marginal
+distribution while destroying associations among variables. Their agreement
+provides complementary evidence that the leading eigenvalue reflects
+multivariate structure.
+
+## Interpret the retained component
+
+`sigPCA` identifies which components depart from the null spectrum; the usual
+PCA outputs remain useful for statistical interpretation. We fit `prcomp()`
+with the same centering and scaling choices, then examine the scores on the
+first two components. Species is added only at this stage.
+
+```{r scores, fig.cap="PCA scores for the iris observations. Species labels were not used by sigPCA."}
+iris_pca <- stats::prcomp(x, center = TRUE, scale. = TRUE)
+variance_explained <- 100 * iris_pca$sdev^2 / sum(iris_pca$sdev^2)
+
+score_data <- data.frame(
+  PC1 = iris_pca$x[, 1],
+  PC2 = iris_pca$x[, 2],
+  species = iris_data$Species[complete_rows]
+)
+
+ggplot2::ggplot(score_data) +
+  ggplot2::aes(x = PC1, y = PC2, colour = species) +
+  ggplot2::geom_point(alpha = 0.75, size = 2) +
+  ggplot2::labs(
+    x = sprintf("PC1 (%.1f%% of variance)", variance_explained[1]),
+    y = sprintf("PC2 (%.1f%% of variance)", variance_explained[2]),
+    colour = "Species"
+  ) +
+  ggplot2::theme_minimal()
+```
+
+The significant first axis separates much of the morphological variation among
+species even though species was not included in the significance analysis. In
+particular, it separates *Iris setosa* from the other species and organizes the
+remaining observations along a morphological gradient. This is the useful
+division of labour: `sigPCA` supplies an evidence-based retention rule, whereas
+scores and loadings explain what a retained component represents.
+
+The loadings show which measurements define the axis. Their signs may reverse
+without changing the PCA solution.
+
+```{r loadings}
+round(iris_pca$rotation[, 1, drop = FALSE], 3)
+```
+
+## What about eigenvalues below the lower bound?
+
+In these data, the two smallest eigenvalues fall below the MP lower bound. They
+should not be interpreted as additional high-variance components to retain. A
+small eigenvalue indicates a direction in which the data vary less than the
+null model predicts, often because correlated variables create redundancy or
+an approximately constrained combination of measurements. Thus, departures on
+the two sides have different uses:
+
+* eigenvalues above the upper bound identify unusually strong axes of
+  variation;
+* eigenvalues below the lower bound identify unusually compressed directions.
+
+The current `sigPCA` retention rule reports the first case through
+`significant_components`. The lower tail can still be scientifically
+interesting when the goal is to study constraints, collinearity, or redundant
+measurements.
+
+As with an upper-tail result, a lower-tail departure should be interpreted in
+light of finite-sample variation and the suitability of the MP null model.
+
+## Practical considerations
+
+The MP comparison is a null-model diagnostic, not a guarantee that a component
+is scientifically important. Its interpretation depends on preprocessing and
+on the assumption that the noise-only variables are sufficiently comparable to
+the random-matrix model. This example has many more observations than variables
+and is intended to make the workflow transparent; MP results are especially
+useful in larger, higher-dimensional applications.
+
+The `iris` measurements contain no missing values, but missingness must be
+handled before calling `sigPCA` in other data. Likewise, standardization is a
+scientific choice. It is useful here because we want equal relative weight for
+each measurement, but it need not be appropriate when absolute variance carries
+the meaning of interest.
+
+## References
+
+Anderson, E. (1935). The irises of the Gaspe Peninsula. *Bulletin of the
+American Iris Society*, 59, 2--5.

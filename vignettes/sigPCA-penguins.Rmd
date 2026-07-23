@@ -1,0 +1,353 @@
+---
+title: "Finding structure in Palmer penguins with sigPCA"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Finding structure in Palmer penguins with sigPCA}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 4.5
+)
+```
+
+## Overview
+
+Principal component analysis (PCA) orders axes by the amount of variation they
+explain, but it does not determine how many of those axes contain structure
+beyond sampling noise. A scree plot can suggest a cutoff, although that choice
+is often subjective. `sigPCA` instead compares the observed eigenvalues with a
+null spectrum.
+
+The [`palmerpenguins` PCA
+vignette](https://allisonhorst.github.io/palmerpenguins/articles/pca.html)
+develops a useful exploratory sequence: inspect the relationships among the
+morphological measurements, standardize them, fit a PCA, and interpret the
+scores and loadings. [Friendly's multivariate
+analysis](https://rpubs.com/friendly/penguin-biplots) emphasizes the biplot as
+a joint view of observations and variables. We follow that general sequence,
+but add a question between fitting and interpreting the PCA: which components
+depart from a noise-only spectrum?
+
+We first use the Marchenko--Pastur bounds and then compare the result with a
+permutation test. Species labels are withheld from both tests and used only
+afterward to interpret the components.
+
+## Start from the morphological measurements
+
+The `penguins` data contain four continuous measurements of body and bill
+dimensions. We retain those variables, remove rows with missing measurements,
+and keep the species label separately for later interpretation.
+
+```{r data}
+measurement_names <- c(
+  "bill_length_mm",
+  "bill_depth_mm",
+  "flipper_length_mm",
+  "body_mass_g"
+)
+
+penguins <- palmerpenguins::penguins
+complete_rows <- stats::complete.cases(penguins[, measurement_names])
+
+x <- as.matrix(penguins[complete_rows, measurement_names])
+
+c(
+  observations = nrow(x),
+  measurements = ncol(x),
+  omitted_rows = sum(!complete_rows)
+)
+```
+
+The correlation matrix gives the first indication that the four measurements
+do not vary independently.
+
+```{r correlations}
+round(stats::cor(x), 2)
+```
+
+Flipper length and body mass form the strongest positive pair. Bill depth is
+negatively associated with the other measurements when the species are pooled.
+PCA summarizes these overlapping relationships as orthogonal axes rather than
+examining each pair in isolation.
+
+The variables are measured on very different scales: millimetres for bill and
+flipper measurements, and grams for body mass. We therefore center and scale
+them so that the PCA is based on their correlation structure instead of being
+dominated by body mass merely because of its units.
+
+## Fit the conventional PCA
+
+```{r pca}
+penguin_pca <- stats::prcomp(
+  x,
+  center = TRUE,
+  scale. = TRUE
+)
+
+eigenvalues <- penguin_pca$sdev^2
+variance_explained <- 100 * eigenvalues / sum(eigenvalues)
+
+pca_summary <- data.frame(
+  component = paste0("PC", seq_along(eigenvalues)),
+  eigenvalue = round(eigenvalues, 3),
+  variance_percent = round(variance_explained, 1),
+  cumulative_percent = round(cumsum(variance_explained), 1)
+)
+
+knitr::kable(pca_summary)
+```
+
+The usual summary makes the first two components look attractive: together
+they explain about 88% of the standardized variance. Explained variance,
+however, is a descriptive quantity. It does not establish whether an observed
+eigenvalue is larger than expected under a null model.
+
+## Test the eigenvalue spectrum
+
+The Marchenko--Pastur (MP) distribution describes the eigenvalue spectrum
+expected under a noise model. For a matrix with $n$ observations and $p$
+standardized variables, `sigPCA` calculates the bounds
+
+\[
+\lambda_{\pm} = \left(1 \pm \sqrt{p/n}\right)^2.
+\]
+
+Eigenvalues above the upper bound are candidates for structured variation that
+cannot be explained by this null model. We request both the MP and permutation
+analyses in one call.
+
+```{r fit}
+set.seed(2026)
+
+penguin_sig <- sigPCA::sigPCA(
+  x,
+  method = "both",
+  num_permutations = 999
+)
+
+penguin_sig$mp$mp_bounds
+penguin_sig$combined
+```
+
+The component-level results make the two comparisons explicit.
+
+```{r results-table}
+component_results <- data.frame(
+  component = paste0("PC", seq_along(eigenvalues)),
+  eigenvalue = round(eigenvalues, 3),
+  variance_percent = round(variance_explained, 1),
+  beyond_mp_upper = seq_along(eigenvalues) %in%
+    penguin_sig$mp$significant_components,
+  permutation_p = round(penguin_sig$perm$pvalues, 4)
+)
+
+knitr::kable(component_results)
+```
+
+PC1 lies above the MP upper bound and is also supported by the permutation
+analysis. PC2 explains a visible fraction of the variance, but it is not
+selected by the upper-tail MP rule. This is precisely the distinction that a
+conventional scree plot cannot make by itself.
+
+```{r spectrum, fig.cap="Observed eigenvalues and the Marchenko--Pastur bounds. Components above the upper bound are highlighted."}
+sigPCA::plot_sigPCA(
+  penguin_sig$mp$eigenvalues,
+  penguin_sig$mp$mp_bounds
+)
+```
+
+The component-by-component plot makes the retention decision easy to inspect.
+The package also provides `plot_sigPCA_histogram()`, based on an original
+design by Enrique Hernández-Lemus, as a complementary view of the empirical
+eigenvalue distribution. Dashed lines mark both MP bounds, while rug marks
+identify eigenvalues above the upper bound. Because this example contains only
+four eigenvalues, we use one histogram bin per component; the distributional
+view becomes more informative as the number of variables increases.
+
+```{r spectrum-histogram, fig.cap="Empirical eigenvalue distribution with the Marchenko--Pastur bounds. Rug marks identify eigenvalues above the upper bound."}
+sigPCA::plot_sigPCA_histogram(
+  penguin_sig,
+  bins = ncol(x)
+)
+```
+
+The two methods use related but different null models. The MP test compares the
+observed spectrum with a theoretical spectrum determined by $p/n$. The
+permutation test independently shuffles each variable, preserving its marginal
+distribution while destroying associations among variables. Agreement between
+them strengthens the conclusion that the leading eigenvalue reflects
+multivariate structure.
+
+## Interpret the retained structure
+
+`sigPCA` addresses component retention; the ordinary PCA outputs address
+interpretation. The loadings below show which measurements define PC1. Their
+signs may reverse without changing the PCA solution, so direction matters only
+relative to the other loadings.
+
+```{r loadings, fig.cap="Absolute loadings for the retained first component. Fill indicates the loading sign."}
+loading_data <- data.frame(
+  measurement = rownames(penguin_pca$rotation),
+  loading = penguin_pca$rotation[, 1]
+)
+
+ggplot2::ggplot(loading_data) +
+  ggplot2::aes(
+    x = abs(loading),
+    y = stats::reorder(measurement, abs(loading)),
+    fill = loading > 0
+  ) +
+  ggplot2::geom_col() +
+  ggplot2::scale_fill_manual(
+    values = c("#b6dfe2", "#0A537D"),
+    labels = c("Negative", "Positive")
+  ) +
+  ggplot2::labs(
+    x = "Absolute loading",
+    y = NULL,
+    fill = "Sign"
+  ) +
+  ggplot2::theme_minimal()
+```
+
+Flipper length and body mass contribute strongly and in the same direction,
+consistent with their correlation. Bill length points in that direction as
+well, whereas bill depth opposes the other measurements. PC1 therefore
+captures a broad morphological contrast rather than reproducing any single
+measurement.
+
+A biplot places that axis back in its phenomenological context. Species is used here for
+colour and shape, but it played no role in fitting the PCA or testing its
+eigenvalues. The loading vectors are multiplied by a common factor so they can
+be displayed on the score scale without changing their relative angles or
+lengths.
+
+```{r biplot, fig.cap="Scores and loading vectors for the first two components. Species labels are used only for interpretation."}
+score_data <- data.frame(
+  PC1 = penguin_pca$x[, 1],
+  PC2 = penguin_pca$x[, 2],
+  species = penguins$species[complete_rows]
+)
+
+loading_vectors <- data.frame(
+  measurement = rownames(penguin_pca$rotation),
+  PC1 = penguin_pca$rotation[, 1],
+  PC2 = penguin_pca$rotation[, 2]
+)
+
+score_span <- vapply(
+  score_data[, c("PC1", "PC2")],
+  function(z) diff(range(z)),
+  numeric(1)
+)
+
+loading_span <- vapply(
+  loading_vectors[, c("PC1", "PC2")],
+  function(z) diff(range(z)),
+  numeric(1)
+)
+
+arrow_multiplier <- 0.35 * min(score_span / loading_span)
+loading_vectors$PC1 <- loading_vectors$PC1 * arrow_multiplier
+loading_vectors$PC2 <- loading_vectors$PC2 * arrow_multiplier
+
+penguin_colours <- c(
+  Adelie = "darkorange",
+  Chinstrap = "purple",
+  Gentoo = "cyan4"
+)
+
+ggplot2::ggplot(score_data) +
+  ggplot2::aes(x = PC1, y = PC2, colour = species, shape = species) +
+  ggplot2::geom_point(alpha = 0.75, size = 2) +
+  ggplot2::geom_segment(
+    data = loading_vectors,
+    ggplot2::aes(x = 0, y = 0, xend = PC1, yend = PC2),
+    inherit.aes = FALSE,
+    colour = "#0A537D",
+    arrow = grid::arrow(length = grid::unit(0.08, "inches"))
+  ) +
+  ggplot2::geom_text(
+    data = loading_vectors,
+    ggplot2::aes(x = PC1, y = PC2, label = measurement),
+    inherit.aes = FALSE,
+    colour = "#0A537D",
+    hjust = 0,
+    vjust = 1,
+    size = 3.5,
+    check_overlap = TRUE
+  ) +
+  ggplot2::scale_colour_manual(values = penguin_colours) +
+  ggplot2::labs(
+    x = sprintf("PC1 (%.1f%% of variance)", variance_explained[1]),
+    y = sprintf("PC2 (%.1f%% of variance)", variance_explained[2]),
+    colour = "Species",
+    shape = "Species"
+  ) +
+  ggplot2::theme_minimal()
+```
+
+The retained first axis separates much of the Gentoo morphology from Adelie
+and Chinstrap morphology. PC2 helps display the contrast in bill dimensions
+and the separation between Adelie and Chinstrap penguins, as in earlier
+exploratory analyses of these data, but it is not selected by the upper-tail
+MP criterion. A component can therefore remain useful as a descriptive
+coordinate without being retained as evidence of structure under a particular
+null model.
+
+## What about eigenvalues below the lower bound?
+
+Several eigenvalues fall below the MP lower bound. They should not be
+interpreted as additional high-variance components to retain. A small
+eigenvalue indicates a direction in which the data vary less than the null
+model predicts, often because correlated variables create redundancy or an
+approximately constrained combination of measurements. Thus, departures on
+the two sides have different meanings:
+
+- eigenvalues above the upper bound identify unusually strong axes of
+  variation;
+
+- eigenvalues below the lower bound identify unusually compressed directions.
+
+The current `sigPCA` retention rule reports the first case through
+`significant_components`. The lower tail can still be scientifically
+interesting when the goal is to study constraints, collinearity, or redundant
+measurements.
+
+## Practical considerations
+
+The MP comparison is a null-model diagnostic, not a guarantee that a component
+is important in its phenomenological context. Its interpretation depends on preprocessing and on
+the suitability of the random-matrix null model. This example has many more
+observations than variables and is intended to make the workflow transparent;
+MP results are especially useful in larger, higher-dimensional applications.
+
+Missing values must be handled before calling `sigPCA`. Complete-case removal
+is adequate for this demonstration, but it may introduce bias in other data.
+Likewise, scaling is appropriate here because the measurements use different
+units. It need not be appropriate when absolute variance carries the scientific
+meaning of interest.
+
+## References
+
+Friendly, M. (2020). *Penguin data: Multivariate EDA*. RPubs.
+<https://rpubs.com/friendly/penguin-biplots>
+
+Horst, A. M., Hill, A. P., and Gorman, K. B. *PCA with penguins and recipes*.
+`palmerpenguins` package vignette.
+<https://allisonhorst.github.io/palmerpenguins/articles/pca.html>
+
+Horst, A. M., Hill, A. P., and Gorman, K. B. (2022). Palmer Archipelago
+Penguins Data in the palmerpenguins R Package: An Alternative to Anderson's
+Irises. *The R Journal*, 14(1), 244--254.
+<https://doi.org/10.32614/RJ-2022-020>
+
+Marchenko, V. A. and Pastur, L. A. (1967). Distribution of eigenvalues for
+some sets of random matrices. *Mathematics of the USSR-Sbornik*, 1(4),
+457--483.
